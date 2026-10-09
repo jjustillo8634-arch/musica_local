@@ -1,0 +1,10 @@
+// Algunos plugins antiguos (como on_audio_query) vienen compilados contra
+// android-33, pero sus dependencias exigen 34 o más. Este script sube el
+// compileSdk de todos los plugins (no de la app) a 36 durante la compilación.
+allprojects {
+    afterEvaluate { project ->
+        if (project.name != 'app' && project.hasProperty('android')) {
+            project.android.compileSdkVersion 36
+        }
+    }
+}
