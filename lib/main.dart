@@ -3,6 +3,9 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:on_audio_query_forked/on_audio_query.dart';
 
+import 'equalizer_page.dart';
+import 'player_hub.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await JustAudioBackground.init(
@@ -40,7 +43,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _query = OnAudioQuery();
-  final _player = AudioPlayer();
+  final _player = PlayerHub.instance.player;
 
   List<SongModel> _songs = [];
   bool _loading = true;
@@ -93,7 +96,8 @@ class _HomePageState extends State<HomePage> {
             )
             .toList(),
       );
-      await _player.setAudioSource(playlist, preload: false);
+      await _player.setAudioSource(playlist);
+      PlayerHub.instance.initEqualizer();
     }
 
     if (!mounted) return;
@@ -104,15 +108,20 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi música')),
+      appBar: AppBar(
+        title: const Text('Mi música'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.equalizer),
+            tooltip: 'Ecualizador',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const EqualizerPage()),
+            ),
+          ),
+        ],
+      ),
       body: _buildBody(),
       bottomNavigationBar: _songs.isEmpty ? null : _MiniPlayer(player: _player),
     );
