@@ -33,6 +33,22 @@ jobs:
       - name: Configurar Android (permisos y servicio de audio)
         run: python3 tools/patch_android.py app
 
+      - name: Parchear plugin on_audio_query (compileSdk 36)
+        working-directory: app
+        run: |
+          flutter pub get
+          CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+          FILES=$(find "$CACHE" -path "*on_audio_query*" -name "build.gradle*")
+          if [ -z "$FILES" ]; then
+            echo "No se encontró el plugin on_audio_query en $CACHE"
+            exit 1
+          fi
+          for f in $FILES; do
+            echo "Parcheando $f"
+            sed -i -E 's/compileSdk(Version)?[ =]+33/compileSdk 36/' "$f"
+            grep -n "compileSdk" "$f" || true
+          done
+
       - name: Compilar APK
         working-directory: app
         run: flutter build apk --release
