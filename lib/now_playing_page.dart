@@ -9,6 +9,7 @@ import 'artwork.dart';
 import 'library.dart';
 import 'nav.dart';
 import 'player_hub.dart';
+import 'queue_sheet.dart';
 import 'sleep_timer_sheet.dart';
 import 'song_info_page.dart';
 import 'theme.dart';
@@ -478,95 +479,4 @@ class _Controls extends StatelessWidget {
       ],
     );
   }
-}
-
-// ----------------------------------------------------------------------
-// Cola de reproducción
-// ----------------------------------------------------------------------
-
-void showQueueSheet(BuildContext context) {
-  final player = PlayerHub.instance.player;
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: kCard,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (ctx) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.92,
-      builder: (ctx, scroll) => StreamBuilder<SequenceState?>(
-        stream: player.sequenceStateStream,
-        builder: (ctx, snap) {
-          final state = snap.data;
-          if (state == null) return const SizedBox.shrink();
-          final order = state.effectiveSequence;
-          final current = state.currentSource;
-          var start = current == null ? 0 : order.indexOf(current);
-          if (start < 0) start = 0;
-          final upcoming = order.sublist(start);
-
-          return Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'A continuación',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  controller: scroll,
-                  itemCount: upcoming.length,
-                  itemBuilder: (ctx, i) {
-                    final src = upcoming[i];
-                    final tag = src.tag;
-                    if (tag is! MediaItem) return const SizedBox.shrink();
-                    final song = MusicLibrary.instance.byId[int.tryParse(tag.id)];
-                    final isCurrent = i == 0;
-                    return ListTile(
-                      leading: SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: Artwork(albumId: song?.albumId, px: 120, radius: 6),
-                      ),
-                      title: Text(
-                        tag.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: isCurrent ? kRed : null,
-                        ),
-                      ),
-                      subtitle: Text(
-                        tag.artist ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: kMuted),
-                      ),
-                      onTap: () {
-                        final idx = state.sequence.indexOf(src);
-                        if (idx >= 0) {
-                          player.seek(Duration.zero, index: idx);
-                          player.play();
-                        }
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    ),
-  );
 }

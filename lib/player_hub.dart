@@ -7,6 +7,7 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:on_audio_query_forked/on_audio_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'art_cache.dart';
 import 'library.dart' show cleanText;
 
 /// Preset de ecualizador. [curve] son 5 puntos de graves a agudos, en dB.
@@ -115,19 +116,29 @@ class PlayerHub extends ChangeNotifier {
         artist: cleanText(s.artist, 'Artista desconocido'),
         album: cleanText(s.album, ''),
         duration: s.duration != null ? Duration(milliseconds: s.duration!) : null,
+        // Portada en archivo: así se ve en la notificación y en el bloqueo.
+        artUri: ArtCache.uriFor(s.albumId),
       ),
     );
   }
 
+  /// Cola actual (permite añadir, quitar y reordenar mientras suena).
+  ConcatenatingAudioSource? _queue;
+
   Future<void> _setQueue(List<SongModel> songs, int index) async {
+    // La portada de la canción inicial debe existir antes de cargarla.
+    await ArtCache.ensure(songs[index].albumId);
     final source = ConcatenatingAudioSource(
       children: [for (final s in songs) _toSource(s)],
     );
+    _queue = source;
     await player.setAudioSource(
       source,
       initialIndex: index,
       initialPosition: Duration.zero,
     );
+    // El resto de portadas se preparan en segundo plano.
+    unawaited(ArtCache.warm(songs.map((s) => s.albumId)));
     unawaited(initEqualizer().catchError((_) {}));
   }
 
@@ -153,6 +164,41 @@ class PlayerHub extends ChangeNotifier {
   Future<void> shuffleAll(List<SongModel> songs) async {
     if (songs.isEmpty) return;
     await playSongs(songs, Random().nextInt(songs.length), shuffle: true);
+  }
+
+  // ------------------------------------------------------------------
+  // Editar la cola
+  // ------------------------------------------------------------------
+
+  /// Inserta la canción justo después de la actual.
+  Future<void> playNext(SongModel song) async {
+    final q = _queue;
+    if (q == null) {
+      await playSongs([song], 0);
+      return;
+    }
+    await ArtCache.ensure(song.albumId);
+    final at = (player.currentIndex ?? -1) + 1;
+    await q.insert(at.clamp(0, q.length).toInt(), _toSource(song));
+  }
+
+  /// Añade la canción al final de la cola.
+  Future<void> addToQueue(SongModel song) async {
+    final q = _queue;
+    if (q == null) {
+      await playSongs([song], 0);
+      return;
+    }
+    await ArtCache.ensure(song.albumId);
+    await q.add(_toSource(song));
+  }
+
+  Future<void> removeFromQueue(int index) async {
+    await _queue?.removeAt(index);
+  }
+
+  Future<void> moveInQueue(int from, int to) async {
+    await _queue?.move(from, to);
   }
 
   // ------------------------------------------------------------------

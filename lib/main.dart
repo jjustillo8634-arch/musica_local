@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'albums_page.dart';
+import 'art_cache.dart';
 import 'artists_page.dart';
 import 'home_page.dart';
 import 'library.dart';
 import 'mini_player.dart';
 import 'player_hub.dart';
+import 'playlists.dart';
 import 'songs_page.dart';
 import 'theme.dart';
 
@@ -15,8 +18,15 @@ Future<void> main() async {
   await JustAudioBackground.init(
     androidNotificationChannelId: 'com.example.musica_local.channel.audio',
     androidNotificationChannelName: 'Reproducción de música',
-    androidNotificationOngoing: true,
+    // La notificación (con controles y portada) se queda también en pausa,
+    // así se puede reanudar desde la pantalla de bloqueo.
+    androidNotificationOngoing: false,
+    androidStopForegroundOnPause: false,
+    androidNotificationIcon: 'drawable/ic_music_note',
+    notificationColor: kRed,
+    preloadArtwork: true,
   );
+  await ArtCache.init();
   runApp(const MusicApp());
 }
 
@@ -53,6 +63,11 @@ class _AppShellState extends State<AppShell> {
   Future<void> _boot() async {
     final hub = PlayerHub.instance;
     await hub.init();
+    await PlaylistStore.instance.load();
+    // Android 13+: permiso para mostrar la notificación con controles.
+    try {
+      await Permission.notification.request();
+    } catch (_) {}
     await MusicLibrary.instance.load();
     final songs = MusicLibrary.instance.songs;
     if (songs.isNotEmpty) await hub.prepareQueue(songs);

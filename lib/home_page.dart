@@ -4,6 +4,8 @@ import 'package:on_audio_query_forked/on_audio_query.dart';
 import 'library.dart';
 import 'nav.dart';
 import 'player_hub.dart';
+import 'playlist_widgets.dart';
+import 'playlists.dart';
 import 'settings_page.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -15,11 +17,12 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final lib = MusicLibrary.instance;
     final hub = PlayerHub.instance;
+    final playlists = PlaylistStore.instance;
 
     return SafeArea(
       bottom: false,
       child: ListenableBuilder(
-        listenable: Listenable.merge([lib, hub]),
+        listenable: Listenable.merge([lib, hub, playlists]),
         builder: (context, _) {
           final recents = [
             for (final id in hub.recentIds)
@@ -63,6 +66,26 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
               ],
+              SectionTitle(
+                'Playlists',
+                trailing: IconButton(
+                  icon: const Icon(Icons.add_circle_outline, color: kRed),
+                  tooltip: 'Nueva playlist',
+                  onPressed: () => createPlaylistFlow(context),
+                ),
+              ),
+              SizedBox(
+                height: 215,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: playlists.playlists.length + 1,
+                  separatorBuilder: (_, __) => const SizedBox(width: 14),
+                  itemBuilder: (context, i) => i == 0
+                      ? const NewPlaylistCard()
+                      : PlaylistCard(playlist: playlists.playlists[i - 1]),
+                ),
+              ),
               const SectionTitle('Escuchadas recientemente'),
               if (recents.isEmpty)
                 const Padding(

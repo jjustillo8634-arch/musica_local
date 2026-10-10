@@ -4,6 +4,7 @@ import 'package:on_audio_query_forked/on_audio_query.dart';
 import 'artwork.dart';
 import 'library.dart';
 import 'player_hub.dart';
+import 'song_actions.dart';
 import 'theme.dart';
 
 String fmtDuration(Duration d) {
@@ -42,31 +43,44 @@ class ScreenTitle extends StatelessWidget {
 
 class SectionTitle extends StatelessWidget {
   final String text;
-  const SectionTitle(this.text, {super.key});
+  final Widget? trailing;
+  const SectionTitle(this.text, {super.key, this.trailing});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+      padding: const EdgeInsets.fromLTRB(20, 24, 12, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
+          ),
+          if (trailing != null) trailing!,
+        ],
       ),
     );
   }
 }
 
 /// Fila de canción con portada, título, artista y duración.
+/// Pulsación larga (o el botón ⋯) abre las acciones de la canción.
 class SongTile extends StatelessWidget {
   final SongModel song;
   final VoidCallback onTap;
   final int? number;
+  final bool showMenu;
+  final Widget? trailingExtra;
 
   const SongTile({
     super.key,
     required this.song,
     required this.onTap,
     this.number,
+    this.showMenu = true,
+    this.trailingExtra,
   });
 
   @override
@@ -77,7 +91,8 @@ class SongTile extends StatelessWidget {
         final active = current == song.id;
         return ListTile(
           onTap: onTap,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+          onLongPress: () => showSongActions(context, song),
+          contentPadding: const EdgeInsets.only(left: 20, right: 4, top: 2, bottom: 2),
           leading: SizedBox(
             width: 48,
             height: 48,
@@ -109,9 +124,23 @@ class SongTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: kMuted),
           ),
-          trailing: Text(
-            fmtMs(song.duration),
-            style: const TextStyle(color: kMuted, fontSize: 13),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                fmtMs(song.duration),
+                style: const TextStyle(color: kMuted, fontSize: 13),
+              ),
+              if (showMenu)
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.more_horiz, color: kMuted),
+                  onPressed: () => showSongActions(context, song),
+                )
+              else
+                const SizedBox(width: 8),
+              if (trailingExtra != null) trailingExtra!,
+            ],
           ),
         );
       },
