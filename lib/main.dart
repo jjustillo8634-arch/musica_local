@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:on_audio_query_forked/on_audio_query.dart';
 
-import 'equalizer_page.dart';
+import 'albums_page.dart';
+import 'artists_page.dart';
+import 'home_page.dart';
+import 'library.dart';
+import 'mini_player.dart';
 import 'player_hub.dart';
+import 'songs_page.dart';
+import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,289 +28,142 @@ class MusicApp extends StatelessWidget {
     return MaterialApp(
       title: 'Mi música',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepPurple,
-        brightness: Brightness.dark,
-      ),
-      home: const HomePage(),
+      theme: buildTheme(),
+      home: const AppShell(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<AppShell> createState() => _AppShellState();
 }
 
-class _HomePageState extends State<HomePage> {
-  final _query = OnAudioQuery();
-  final _player = PlayerHub.instance.player;
-
-  List<SongModel> _songs = [];
-  bool _loading = true;
-  bool _denied = false;
+class _AppShellState extends State<AppShell> {
+  int _tab = 0;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _boot();
   }
 
-  Future<void> _init() async {
-    setState(() {
-      _loading = true;
-      _denied = false;
-    });
-
-    final granted = await _query.checkAndRequest(retryRequest: false);
-    if (!granted) {
-      if (!mounted) return;
-      setState(() {
-        _denied = true;
-        _loading = false;
-      });
-      return;
-    }
-
-    final all = await _query.querySongs(
-      sortType: SongSortType.TITLE,
-      orderType: OrderType.ASC_OR_SMALLER,
-      uriType: UriType.EXTERNAL,
-      ignoreCase: true,
-    );
-    final songs =
-        all.where((s) => (s.isMusic ?? false) && s.uri != null).toList();
-
-    if (songs.isNotEmpty) {
-      final playlist = ConcatenatingAudioSource(
-        children: songs
-            .map(
-              (s) => AudioSource.uri(
-                Uri.parse(s.uri!),
-                tag: MediaItem(
-                  id: s.id.toString(),
-                  title: s.title,
-                  artist: s.artist ?? 'Desconocido',
-                  album: s.album,
-                ),
-              ),
-            )
-            .toList(),
-      );
-      await _player.setAudioSource(playlist);
-      PlayerHub.instance.initEqualizer();
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _songs = songs;
-      _loading = false;
-    });
+  Future<void> _boot() async {
+    final hub = PlayerHub.instance;
+    await hub.init();
+    await MusicLibrary.instance.load();
+    final songs = MusicLibrary.instance.songs;
+    if (songs.isNotEmpty) await hub.prepareQueue(songs);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi música'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.equalizer),
-            tooltip: 'Ecualizador',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const EqualizerPage()),
-            ),
-          ),
-        ],
-      ),
-      body: _buildBody(),
-      bottomNavigationBar: _songs.isEmpty ? null : _MiniPlayer(player: _player),
-    );
-  }
+    return ListenableBuilder(
+      listenable: MusicLibrary.instance,
+      builder: (context, _) {
+        final lib = MusicLibrary.instance;
 
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_denied) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Necesito permiso para leer tu música.\n'
-                'Concédelo en Ajustes del teléfono y vuelve a intentar.',
-                textAlign: TextAlign.center,
+        if (lib.loading && lib.songs.isEmpty) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator(color: kRed)),
+          );
+        }
+
+        if (lib.denied) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Necesito permiso para leer tu música.\n'
+                      'Concédelo en Ajustes del teléfono y vuelve a intentar.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _boot,
+                      style: FilledButton.styleFrom(backgroundColor: kRed),
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: _init, child: const Text('Reintentar')),
+            ),
+          );
+        }
+
+        if (lib.songs.isEmpty) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'No se encontraron canciones en el teléfono.',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _boot,
+                      style: FilledButton.styleFrom(backgroundColor: kRed),
+                      child: const Text('Actualizar'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Scaffold(
+          body: IndexedStack(
+            index: _tab,
+            children: const [
+              HomePage(),
+              SongsPage(),
+              ArtistsPage(),
+              AlbumsPage(),
             ],
           ),
-        ),
-      );
-    }
-    if (_songs.isEmpty) {
-      return const Center(child: Text('No se encontraron canciones.'));
-    }
-
-    return StreamBuilder<int?>(
-      stream: _player.currentIndexStream,
-      builder: (context, snap) {
-        final current = snap.data;
-        return ListView.builder(
-          itemCount: _songs.length,
-          itemBuilder: (context, i) {
-            final song = _songs[i];
-            return ListTile(
-              selected: i == current,
-              leading: const CircleAvatar(child: Icon(Icons.music_note)),
-              title: Text(song.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(
-                song.artist ?? 'Desconocido',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const MiniPlayer(),
+              NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (i) => setState(() => _tab = i),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home),
+                    label: 'Inicio',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.music_note_outlined),
+                    selectedIcon: Icon(Icons.music_note),
+                    label: 'Canciones',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline),
+                    selectedIcon: Icon(Icons.person),
+                    label: 'Artistas',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.album_outlined),
+                    selectedIcon: Icon(Icons.album),
+                    label: 'Álbumes',
+                  ),
+                ],
               ),
-              onTap: () async {
-                await _player.seek(Duration.zero, index: i);
-                _player.play();
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _MiniPlayer extends StatelessWidget {
-  final AudioPlayer player;
-  const _MiniPlayer({required this.player});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      elevation: 8,
-      color: Theme.of(context).colorScheme.surfaceContainer,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            StreamBuilder<SequenceState?>(
-              stream: player.sequenceStateStream,
-              builder: (context, snap) {
-                final tag = snap.data?.currentSource?.tag;
-                final item = tag is MediaItem ? tag : null;
-                return ListTile(
-                  dense: true,
-                  title: Text(
-                    item?.title ?? 'Elige una canción',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    item?.artist ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              },
-            ),
-            _SeekBar(player: player),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.skip_previous),
-                  onPressed: player.seekToPrevious,
-                ),
-                StreamBuilder<PlayerState>(
-                  stream: player.playerStateStream,
-                  builder: (context, snap) {
-                    final playing = snap.data?.playing ?? false;
-                    final state = snap.data?.processingState;
-                    if (state == ProcessingState.loading ||
-                        state == ProcessingState.buffering) {
-                      return const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    }
-                    return IconButton(
-                      iconSize: 40,
-                      icon: Icon(playing ? Icons.pause_circle : Icons.play_circle),
-                      onPressed: playing ? player.pause : player.play,
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.skip_next),
-                  onPressed: player.seekToNext,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SeekBar extends StatelessWidget {
-  final AudioPlayer player;
-  const _SeekBar({required this.player});
-
-  String _fmt(Duration d) {
-    final m = d.inMinutes;
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<Duration?>(
-      stream: player.durationStream,
-      builder: (context, durSnap) {
-        final total = durSnap.data ?? Duration.zero;
-        return StreamBuilder<Duration>(
-          stream: player.positionStream,
-          builder: (context, posSnap) {
-            final pos = posSnap.data ?? Duration.zero;
-            final max = total.inMilliseconds > 0
-                ? total.inMilliseconds.toDouble()
-                : 1.0;
-            final value = pos.inMilliseconds.toDouble().clamp(0.0, max).toDouble();
-            return Row(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: Text(_fmt(pos)),
-                ),
-                Expanded(
-                  child: Slider(
-                    min: 0,
-                    max: max,
-                    value: value,
-                    onChanged: (v) =>
-                        player.seek(Duration(milliseconds: v.round())),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Text(_fmt(total)),
-                ),
-              ],
-            );
-          },
+            ],
+          ),
         );
       },
     );
