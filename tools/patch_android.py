@@ -1,4 +1,6 @@
 import pathlib
+import shutil
+import subprocess
 import sys
 
 root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "app")
@@ -122,5 +124,14 @@ res = root / "android/app/src/main/res"
 """,
     encoding="utf-8",
 )
+
+# ---------- Paquetes extra ----------
+# Se instalan aquí (y no solo en el workflow) para que funcione aunque el
+# archivo del workflow en GitHub sea una versión antigua.
+EXTRA_PACKAGES = ["path_provider", "permission_handler"]
+if shutil.which("flutter"):
+    subprocess.run(["flutter", "pub", "add", *EXTRA_PACKAGES], cwd=root, check=True)
+else:
+    print("flutter no está en el PATH; se omite la instalación de paquetes extra.")
 
 print("Proyecto Android configurado.")
