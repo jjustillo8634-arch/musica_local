@@ -26,7 +26,6 @@ Future<void> main() async {
     androidStopForegroundOnPause: false,
     androidNotificationIcon: 'drawable/ic_music_note',
     notificationColor: kRed,
-    preloadArtwork: true,
   );
   await ArtCache.init();
   runApp(const MusicApp());

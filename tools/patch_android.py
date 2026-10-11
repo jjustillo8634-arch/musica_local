@@ -1,4 +1,5 @@
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -150,6 +151,41 @@ res = root / "android/app/src/main/res"
 """,
     encoding="utf-8",
 )
+
+
+# ---------- Que el recortador de recursos NO borre los iconos ----------
+# El icono de la notificación se busca por nombre desde el código nativo, así
+# que el recortador de la versión release lo consideraba "sin uso" y lo
+# eliminaba. Eso hacía que la app se cerrara al empezar a reproducir.
+(res / "raw").mkdir(parents=True, exist_ok=True)
+(res / "raw/keep.xml").write_text(
+    """<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_music_note,@drawable/ic_launcher_background,@drawable/ic_launcher_foreground,@mipmap/ic_launcher" />
+""",
+    encoding="utf-8",
+)
+
+# ---------- Release sin recorte de código ni de recursos ----------
+for gradle_name, kotlin_dsl in (("build.gradle.kts", True), ("build.gradle", False)):
+    gradle = root / "android/app" / gradle_name
+    if not gradle.exists():
+        continue
+    text = gradle.read_text(encoding="utf-8")
+    if "shrinkResources" in text or "ShrinkResources" in text:
+        break
+    flags = (
+        "            isMinifyEnabled = false\n            isShrinkResources = false\n"
+        if kotlin_dsl
+        else "            minifyEnabled false\n            shrinkResources false\n"
+    )
+    patched = re.sub(r"(release\s*\{\n)", lambda m: m.group(1) + flags, text, count=1)
+    if patched != text:
+        gradle.write_text(patched, encoding="utf-8")
+        print(f"Recorte desactivado en {gradle_name}")
+    else:
+        print(f"AVISO: no encontré el bloque release en {gradle_name}")
+    break
 
 # ---------- Paquetes extra ----------
 # Se instalan aquí (y no solo en el workflow) para que funcione aunque el
