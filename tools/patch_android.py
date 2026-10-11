@@ -50,12 +50,38 @@ manifest.write_text(s, encoding="utf-8")
 activity_dir = root / "android/app/src/main/kotlin/com/example/musica_local"
 activity_dir.mkdir(parents=True, exist_ok=True)
 (activity_dir / "MainActivity.kt").write_text(
-    "package com.example.musica_local\n\n"
-    "import com.ryanheise.audioservice.AudioServiceActivity\n\n"
-    "class MainActivity : AudioServiceActivity()\n",
+    """package com.example.musica_local
+
+import android.os.Build
+import com.ryanheise.audioservice.AudioServiceActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : AudioServiceActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "musica_local/permissions")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "requestNotifications") {
+                    // Android 13+: pedir permiso para mostrar la notificacion.
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        val permission = "android.permission.POST_NOTIFICATIONS"
+                        if (checkSelfPermission(permission) !=
+                            android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            requestPermissions(arrayOf(permission), 1001)
+                        }
+                    }
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
+    }
+}
+""",
     encoding="utf-8",
 )
-
 
 # ---------- Icono de la app (adaptativo, rojo con nota blanca) ----------
 res = root / "android/app/src/main/res"
@@ -128,9 +154,11 @@ res = root / "android/app/src/main/res"
 # ---------- Paquetes extra ----------
 # Se instalan aquí (y no solo en el workflow) para que funcione aunque el
 # archivo del workflow en GitHub sea una versión antigua.
-EXTRA_PACKAGES = ["path_provider", "permission_handler"]
 if shutil.which("flutter"):
-    subprocess.run(["flutter", "pub", "add", *EXTRA_PACKAGES], cwd=root, check=True)
+    # permission_handler ya no se usa (pide una versión de Android demasiado
+    # nueva); el permiso de notificaciones se pide desde MainActivity.
+    subprocess.run(["flutter", "pub", "remove", "permission_handler"], cwd=root, check=False)
+    subprocess.run(["flutter", "pub", "add", "path_provider"], cwd=root, check=True)
 else:
     print("flutter no está en el PATH; se omite la instalación de paquetes extra.")
 

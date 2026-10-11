@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'albums_page.dart';
 import 'art_cache.dart';
@@ -12,6 +12,8 @@ import 'player_hub.dart';
 import 'playlists.dart';
 import 'songs_page.dart';
 import 'theme.dart';
+
+const _permissions = MethodChannel('musica_local/permissions');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +68,8 @@ class _AppShellState extends State<AppShell> {
     await PlaylistStore.instance.load();
     // Android 13+: permiso para mostrar la notificación con controles.
     try {
-      await Permission.notification.request();
+      await const MethodChannel('musica_local/permissions')
+          .invokeMethod<void>('requestNotifications');
     } catch (_) {}
     await MusicLibrary.instance.load();
     final songs = MusicLibrary.instance.songs;
