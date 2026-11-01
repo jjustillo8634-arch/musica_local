@@ -11,6 +11,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Preparar el código (usa musica_local.zip si existe)
+        run: |
+          SRC=""
+          if [ -f musica_local.zip ]; then
+            echo "Encontré musica_local.zip: lo descomprimo"
+            rm -rf _paquete && mkdir -p _paquete
+            unzip -o -q musica_local.zip -d _paquete
+            LIBDIR=$(find _paquete -maxdepth 3 -type d -name lib | head -n 1)
+            if [ -n "$LIBDIR" ]; then SRC=$(dirname "$LIBDIR"); fi
+          fi
+          # Por si se subió la carpeta entera (queda como musica_local/lib en GitHub)
+          if [ -z "$SRC" ] && [ -d musica_local/lib ]; then
+            echo "Encontré la carpeta musica_local/ dentro del repositorio"
+            SRC=musica_local
+          fi
+          if [ -n "$SRC" ]; then
+            rm -rf lib tools
+            cp -r "$SRC/lib" lib
+            cp -r "$SRC/tools" tools
+            echo "Código tomado de: $SRC"
+          else
+            echo "Uso lib/ y tools/ del repositorio tal como están"
+          fi
+          echo "Archivos en lib: $(ls lib | wc -l)"
+          if [ -f lib/personalization_page.dart ]; then
+            echo "Versión nueva detectada (personalization_page.dart presente)"
+          else
+            echo "AVISO: no está personalization_page.dart; es una versión anterior"
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,7 +58,7 @@ jobs:
         run: |
           cp -r lib/. app/lib/
           cd app
-          flutter pub add just_audio just_audio_background on_audio_query_forked shared_preferences path_provider permission_handler
+          flutter pub add just_audio just_audio_background on_audio_query_forked shared_preferences path_provider
 
       - name: Configurar Android (permisos y servicio de audio)
         run: python3 tools/patch_android.py app
