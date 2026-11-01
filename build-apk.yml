@@ -1,0 +1,59 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Crear proyecto Android
+        run: flutter create --platforms=android --org com.example --project-name musica_local app
+
+      - name: Copiar código y añadir paquetes
+        run: |
+          cp -r lib/. app/lib/
+          cd app
+          flutter pub add just_audio just_audio_background on_audio_query_forked shared_preferences path_provider
+
+      - name: Configurar Android (permisos y servicio de audio)
+        run: python3 tools/patch_android.py app
+
+      - name: Parchear plugin on_audio_query (compileSdk 36)
+        working-directory: app
+        run: |
+          flutter pub get
+          CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+          FILES=$(find "$CACHE" -path "*on_audio_query*" -name "build.gradle*")
+          if [ -z "$FILES" ]; then
+            echo "No se encontró el plugin on_audio_query en $CACHE"
+            exit 1
+          fi
+          for f in $FILES; do
+            echo "Parcheando $f"
+            sed -i -E 's/compileSdk(Version)?[ =]+33/compileSdk 36/' "$f"
+            grep -n "compileSdk" "$f" || true
+          done
+
+      - name: Compilar APK
+        working-directory: app
+        run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musica-local-apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
